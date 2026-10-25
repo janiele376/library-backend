@@ -1,6 +1,7 @@
 package com.altis.library_backend.users.models.dtos;
 import jakarta.persistence.Id;
 import jakarta.validation.constraints.*;
+import org.hibernate.validator.constraints.br.CPF;
 
 import java.time.LocalDate;
 public record UserRequestDTO(
@@ -22,6 +23,7 @@ public record UserRequestDTO(
 
         @Pattern(regexp = "^\\d{11}|^\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}$")
         @NotBlank(message = "The cpf field is required")
+        @CPF
         String cpf,
 
         @NotBlank(message = "The address field is required")

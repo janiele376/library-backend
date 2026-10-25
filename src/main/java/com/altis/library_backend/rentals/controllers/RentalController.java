@@ -1,3 +1,4 @@
+
 package com.altis.library_backend.rentals.controllers;
 
 import com.altis.library_backend.rentals.models.dtos.RentalRequestDTO;
@@ -5,17 +6,19 @@ import com.altis.library_backend.rentals.models.dtos.RentalResponseDTO;
 import com.altis.library_backend.rentals.models.dtos.RentalUpdateDTO;
 import com.altis.library_backend.rentals.services.RentalService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import java.util.List;
 
 @RestController
 @RequestMapping("/rentals")
+@Validated
 public class RentalController {
 
     private final RentalService rentalService;
@@ -26,8 +29,8 @@ public class RentalController {
 
     @PostMapping
     public ResponseEntity<RentalResponseDTO> create(
-            @RequestBody @Valid RentalRequestDTO request) {
-
+            @Valid @RequestBody RentalRequestDTO request
+    ) {
         RentalResponseDTO response = rentalService.createRental(request);
 
         URI location = URI.create("/rentals/" + response.id());
@@ -37,12 +40,10 @@ public class RentalController {
 
     @PatchMapping("/{id}")
     public ResponseEntity<RentalResponseDTO> update(
-            @PathVariable Long id,
-            @RequestBody RentalUpdateDTO request
+            @PathVariable @Positive Long id,
+            @Valid @RequestBody RentalUpdateDTO request
     ) {
-
-        RentalResponseDTO response =
-                rentalService.updateRental(id, request);
+        RentalResponseDTO response = rentalService.updateRental(id, request);
 
         return ResponseEntity.ok(response);
     }
@@ -53,7 +54,6 @@ public class RentalController {
             @RequestParam(required = false) String bookTitle,
             @ParameterObject Pageable pageable
     ) {
-
         Page<RentalResponseDTO> responses =
                 rentalService.findAll(userName, bookTitle, pageable);
 
@@ -62,8 +62,8 @@ public class RentalController {
 
     @GetMapping("/{id}")
     public ResponseEntity<RentalResponseDTO> getById(
-            @PathVariable Long id) {
-
+            @PathVariable @Positive Long id
+    ) {
         RentalResponseDTO response = rentalService.findById(id);
 
         return ResponseEntity.ok(response);
@@ -71,8 +71,8 @@ public class RentalController {
 
     @PutMapping("/{id}/renew")
     public ResponseEntity<RentalResponseDTO> renew(
-            @PathVariable Long id) {
-
+            @PathVariable @Positive Long id
+    ) {
         RentalResponseDTO response = rentalService.renewRental(id);
 
         return ResponseEntity.ok(response);
@@ -80,16 +80,17 @@ public class RentalController {
 
     @PutMapping("/{id}/return")
     public ResponseEntity<RentalResponseDTO> returnRental(
-            @PathVariable Long id) {
-
+            @PathVariable @Positive Long id
+    ) {
         RentalResponseDTO response = rentalService.returnRental(id);
 
         return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-
+    public ResponseEntity<Void> delete(
+            @PathVariable @Positive Long id
+    ) {
         rentalService.deleteRental(id);
 
         return ResponseEntity.noContent().build();

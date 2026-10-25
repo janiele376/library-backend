@@ -49,24 +49,36 @@ public class PublisherService {
         );
     }
 
+
     @Transactional(readOnly = true)
-    public Page<PublisherResponseDTO> findAll(Pageable pageable) {
+    public Page<PublisherResponseDTO> findAll(
+            String name,
+            Pageable pageable
+    ) {
+        Page<PublisherEntity> publishers;
 
-        Page<PublisherEntity> publishers =
-                publishersRepository.findAll(pageable);
+        if (name != null && !name.isBlank()) {
+            publishers = publishersRepository
+                    .findByNameContainingIgnoreCase(
+                            name.trim(),
+                            pageable
+                    );
+        } else {
+            publishers = publishersRepository.findAll(pageable);
+        }
 
-        Page<PublisherResponseDTO> responses =
-                publishers.map(publisher -> new PublisherResponseDTO(
+        return publishers.map(publisher ->
+                new PublisherResponseDTO(
                         publisher.getId(),
                         publisher.getName(),
                         publisher.getCnpj(),
                         publisher.getEmail(),
                         publisher.getPhone(),
                         publisher.getAddress()
-                ));
-
-        return responses;
+                )
+        );
     }
+
 
     @Transactional
     public PublisherResponseDTO createPublisher(

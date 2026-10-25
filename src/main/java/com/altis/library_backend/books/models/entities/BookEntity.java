@@ -35,7 +35,7 @@ public class BookEntity {
     private String releaseDate;
 
     @Column(name = "quantity")
-    private Integer quantity=0;
+    private Integer quantity=1;
 
     @ManyToOne
     @JoinColumn(name = "publisher_id")
