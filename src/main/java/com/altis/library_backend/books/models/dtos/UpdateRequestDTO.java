@@ -1,13 +1,7 @@
+
 package com.altis.library_backend.books.models.dtos;
 
-import com.altis.library_backend.publishers.models.entities.PublisherEntity;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Past;
-import jakarta.validation.constraints.Pattern;
-import org.springframework.data.annotation.CreatedDate;
-
-import java.time.LocalDateTime;
+import jakarta.validation.constraints.Min;
 
 public record UpdateRequestDTO(
 
@@ -17,6 +11,9 @@ public record UpdateRequestDTO(
 
         String releaseDate,
 
-        Long publisherId
+        Long publisherId,
+
+        @Min(value = 0, message = "A quantidade não pode ser negativa.")
+        Integer quantity
 
 ) {}

@@ -33,11 +33,16 @@ public class PublisherController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<PublisherResponseDTO>> getAll(@ParameterObject Pageable pageable){
-        Page<PublisherResponseDTO> responses = publisherService.findAll(pageable);
+    public ResponseEntity<Page<PublisherResponseDTO>> getAll(
+            @RequestParam(required = false) String name,
+            @ParameterObject Pageable pageable
+    ) {
+        Page<PublisherResponseDTO> responses =
+                publisherService.findAll(name, pageable);
 
         return ResponseEntity.ok(responses);
     }
+
 
     @GetMapping("/{id}")
     public ResponseEntity<PublisherResponseDTO> getById(@PathVariable Long id){

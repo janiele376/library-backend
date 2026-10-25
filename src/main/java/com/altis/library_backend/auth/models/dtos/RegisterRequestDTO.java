@@ -23,7 +23,7 @@ public record RegisterRequestDTO(
         @Pattern(regexp = "^\\d{11}|^\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}$")
         String cpf,
 
-        @NotBlank(message = "the field cannot be null")
+        @NotNull(message = "the field cannot be null")
         @Past(message = "Date of birth must be in the past")
         LocalDate dateBirth,
 

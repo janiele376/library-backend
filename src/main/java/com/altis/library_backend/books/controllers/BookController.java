@@ -29,7 +29,7 @@ public class BookController {
     public ResponseEntity<BookResponseDTO> create(@RequestBody @Valid BookRequestDTO request){
         BookResponseDTO response = bookService.createBook(request);
 
-        URI location = URI.create("/books/" + response.isbn());
+        URI location = URI.create("/books/" + response.id());
         return ResponseEntity.created(location).body(response);
     }
 

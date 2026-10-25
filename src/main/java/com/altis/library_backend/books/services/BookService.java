@@ -1,3 +1,4 @@
+
 package com.altis.library_backend.books.services;
 
 import com.altis.library_backend.books.models.dtos.BookRequestDTO;
@@ -10,6 +11,7 @@ import com.altis.library_backend.books.specifications.BookSpecification;
 import com.altis.library_backend.publishers.models.entities.PublisherEntity;
 import com.altis.library_backend.publishers.repositories.PublisherRepository;
 import com.altis.library_backend.rentals.repositories.RentalRepository;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -46,16 +48,7 @@ public class BookService {
                         )
                 );
 
-        return new BookResponseDTO(
-                findBook.getId(),
-                findBook.getIsbn(),
-                findBook.getTitle(),
-                findBook.getGenre(),
-                findBook.getReleaseDate(),
-                findBook.getPublisherId().getId(),
-                findBook.getPublisherId().getName(),
-                findBook.getQuantity()
-        );
+        return toBookResponse(findBook);
     }
 
     @Transactional(readOnly = true)
@@ -74,34 +67,19 @@ public class BookService {
         Page<BookEntity> books =
                 bookRepository.findAll(spec, pageable);
 
-        Page<BookResponseDTO> responses =
-                books.map(book -> new BookResponseDTO(
-                        book.getId(),
-                        book.getIsbn(),
-                        book.getTitle(),
-                        book.getGenre(),
-                        book.getReleaseDate(),
-                        book.getPublisherId().getId(),
-                        book.getPublisherId().getName(),
-                        book.getQuantity()
-                ));
-
-        return responses;
+        return books.map(this::toBookResponse);
     }
 
     @Transactional
     public BookResponseDTO createBook(BookRequestDTO request) {
 
-        if (bookRepository.existsByIsbn(request.isbn())) {
+        validateQuantity(request.quantity());
 
-            BookEntity existingBook =
-                    bookRepository.findByIsbn(request.isbn())
-                            .orElseThrow(() ->
-                                    new ResponseStatusException(
-                                            HttpStatus.NOT_FOUND,
-                                            "Book not found."
-                                    )
-                            );
+        BookEntity existingBook =
+                bookRepository.findByIsbn(request.isbn())
+                        .orElse(null);
+
+        if (existingBook != null) {
 
             if (!existingBook.getTitle().equals(request.title())) {
                 throw new ResponseStatusException(
@@ -133,22 +111,33 @@ public class BookService {
                 );
             }
 
-            existingBook.setQuantity(
-                    existingBook.getQuantity() + 1
-            );
+            int currentQuantity =
+                    existingBook.getQuantity() == null
+                            ? 0
+                            : existingBook.getQuantity();
+
+            long newQuantity =
+                    (long) currentQuantity + request.quantity();
+
+            if (newQuantity > Integer.MAX_VALUE) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Book quantity exceeds the allowed limit."
+                );
+            }
+
+            existingBook.setQuantity((int) newQuantity);
 
             BookEntity savedBook =
                     bookRepository.save(existingBook);
 
-            return new BookResponseDTO(
-                    savedBook.getId(),
-                    savedBook.getIsbn(),
-                    savedBook.getTitle(),
-                    savedBook.getGenre(),
-                    savedBook.getReleaseDate(),
-                    savedBook.getPublisherId().getId(),
-                    savedBook.getPublisherId().getName(),
-                    savedBook.getQuantity()
+            return toBookResponse(savedBook);
+        }
+
+        if (request.publisherId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Publisher ID is required."
             );
         }
 
@@ -170,19 +159,13 @@ public class BookService {
         newBook.setReleaseDate(request.releaseDate());
         newBook.setPublisherId(publisher);
 
+        // Quantidade informada no cadastro
+        newBook.setQuantity(request.quantity());
+
         BookEntity savedBook =
                 bookRepository.save(newBook);
 
-        return new BookResponseDTO(
-                savedBook.getId(),
-                savedBook.getIsbn(),
-                savedBook.getTitle(),
-                savedBook.getGenre(),
-                savedBook.getReleaseDate(),
-                savedBook.getPublisherId().getId(),
-                savedBook.getPublisherId().getName(),
-                savedBook.getQuantity()
-        );
+        return toBookResponse(savedBook);
     }
 
     @Transactional
@@ -203,31 +186,24 @@ public class BookService {
         if (request.title() != null
                 && !request.title().isBlank()) {
 
-            existingBook.setTitle(
-                    request.title()
-            );
+            existingBook.setTitle(request.title());
         }
 
         if (request.genre() != null
                 && !request.genre().isBlank()) {
 
-            existingBook.setGenre(
-                    request.genre()
-            );
+            existingBook.setGenre(request.genre());
         }
 
         if (request.releaseDate() != null) {
 
-            existingBook.setReleaseDate(
-                    request.releaseDate()
-            );
+            existingBook.setReleaseDate(request.releaseDate());
         }
 
         if (request.publisherId() != null) {
 
             PublisherEntity publisher =
-                    publisherRepository
-                            .findById(request.publisherId())
+                    publisherRepository.findById(request.publisherId())
                             .orElseThrow(() ->
                                     new ResponseStatusException(
                                             HttpStatus.NOT_FOUND,
@@ -239,6 +215,14 @@ public class BookService {
             existingBook.setPublisherId(publisher);
         }
 
+        // Permite editar a quantidade disponível
+        if (request.quantity() != null) {
+
+            validateQuantity(request.quantity());
+
+            existingBook.setQuantity(request.quantity());
+        }
+
         BookEntity savedBook =
                 bookRepository.save(existingBook);
 
@@ -248,7 +232,8 @@ public class BookService {
                 savedBook.getGenre(),
                 savedBook.getReleaseDate(),
                 savedBook.getPublisherId().getId(),
-                savedBook.getPublisherId().getName()
+                savedBook.getPublisherId().getName(),
+                savedBook.getQuantity()
         );
     }
 
@@ -270,5 +255,36 @@ public class BookService {
         }
 
         bookRepository.deleteById(id);
+    }
+
+    private void validateQuantity(Integer quantity) {
+
+        if (quantity == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Book quantity is required."
+            );
+        }
+
+        if (quantity < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Book quantity cannot be negative."
+            );
+        }
+    }
+
+    private BookResponseDTO toBookResponse(BookEntity book) {
+
+        return new BookResponseDTO(
+                book.getId(),
+                book.getIsbn(),
+                book.getTitle(),
+                book.getGenre(),
+                book.getReleaseDate(),
+                book.getPublisherId().getId(),
+                book.getPublisherId().getName(),
+                book.getQuantity()
+        );
     }
 }
