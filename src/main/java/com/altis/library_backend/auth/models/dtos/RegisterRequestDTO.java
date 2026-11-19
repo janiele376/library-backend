@@ -12,8 +12,11 @@ public record RegisterRequestDTO(
         @Email
         String email,
 
-        @NotBlank(message = "the field cannot be null")
-        @Pattern(regexp = "^\\(\\d{2}\\)\\s9\\d{4}-\\d{4}$")
+        @NotBlank(message = "O telefone é obrigatório")
+        @Pattern(
+                regexp = "^\\d{2}9\\d{8}$",
+                message = "Telefone inválido. Informe o DDD e os 9 dígitos."
+        )
         String phone,
 
         @NotBlank(message = "the field cannot be null")

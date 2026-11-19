@@ -17,8 +17,11 @@ public record UserRequestDTO(
         @NotBlank(message = "The email field is required")
         String email,
 
-        @Pattern(regexp = "^\\(\\d{2}\\)\\s9\\d{4}-\\d{4}$")
-        @NotBlank(message = "The phone field is required")
+        @NotBlank(message = "O telefone é obrigatório")
+        @Pattern(
+                regexp = "^\\d{2}9\\d{8}$",
+                message = "Telefone inválido. Informe o DDD e o número com 9 dígitos."
+        )
         String phone,
 
         @Pattern(regexp = "^\\d{11}|^\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}$")

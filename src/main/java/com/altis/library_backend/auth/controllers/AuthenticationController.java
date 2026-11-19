@@ -74,6 +74,7 @@ public class AuthenticationController {
         String email = data.email().trim().toLowerCase();
 
         String cpf = data.cpf().replaceAll("\\D", "");
+        String phone = data.phone().replaceAll("\\D", "");
 
         if (userRepository.existsByEmail(email)) {
             throw new ResponseStatusException(
@@ -97,6 +98,7 @@ public class AuthenticationController {
                 encryptedPassword
         );
 
+        newUser.setPhone(phone);
         newUser.setEmail(email);
         newUser.setCpf(cpf);
 
