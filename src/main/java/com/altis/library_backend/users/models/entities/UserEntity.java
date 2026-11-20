@@ -49,9 +49,6 @@ public class UserEntity implements UserDetails{
     @Column(name="is_admin",nullable = false)
     private Boolean isAdmin=false;
 
-    @Column(name="is_disabled", nullable = false)
-    private Boolean isDisabled=false;
-
     @Column(name="password",nullable = false)
     private String password;
 
@@ -72,7 +69,6 @@ public class UserEntity implements UserDetails{
         this.address = data.address();
         this.password = encryptedPassword;
         this.isAdmin = false;
-        this.isDisabled = false;
     }
 
     @Override

@@ -1,13 +1,12 @@
+
 package com.altis.library_backend.users.services;
 
 import com.altis.library_backend.auth.models.dtos.ForgotPasswordRequestDTO;
-import com.altis.library_backend.users.models.dtos.UpdateRequestDTO;
-import com.altis.library_backend.users.models.dtos.UpdateResponseDTO;
-import com.altis.library_backend.users.models.dtos.UserRequestDTO;
-import com.altis.library_backend.users.models.dtos.UserResponseDTO;
+import com.altis.library_backend.users.models.dtos.*;
 import com.altis.library_backend.users.models.entities.UserEntity;
 import com.altis.library_backend.users.repositories.UserRepository;
 import com.altis.library_backend.users.specifications.UserSpecification;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -31,33 +30,61 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    private String normalizeCpf(String cpf) {
+        return cpf == null ? null : cpf.replaceAll("\\D", "");
+    }
+
+    private UserResponseDTO toUserResponse(UserEntity user) {
+        return new UserResponseDTO(
+                user.getId(),
+                user.getNameCompleted(),
+                user.getEmail(),
+                user.getPhone(),
+                user.getCpf(),
+                user.getDateBirth(),
+                user.getAddress()
+        );
+    }
+
+    private UserEntity findExistingUser(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "User not found with ID: " + id
+                ));
+    }
+
+    private void validateEmailAvailability(
+            UserEntity existingUser,
+            String email
+    ) {
+        if (email == null || email.isBlank()) {
+            return;
+        }
+
+        if (!existingUser.getEmail().equals(email)
+                && userRepository.existsByEmail(email)) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Email already in use by another account"
+            );
+        }
+    }
+
     @Transactional(readOnly = true)
     public UserResponseDTO findById(Long id) {
 
-        UserEntity findUser = userRepository.findById(id)
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "User not found with ID: " + id
-                        )
-                );
+        UserEntity user = findExistingUser(id);
 
-        if (findUser.getIsAdmin() == true) {
+        if (Boolean.TRUE.equals(user.getIsAdmin())) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "User not found with ID: " + id
             );
         }
 
-        return new UserResponseDTO(
-                findUser.getId(),
-                findUser.getNameCompleted(),
-                findUser.getEmail(),
-                findUser.getPhone(),
-                findUser.getCpf(),
-                findUser.getDateBirth(),
-                findUser.getAddress()
-        );
+        return toUserResponse(user);
     }
 
     @Transactional(readOnly = true)
@@ -68,23 +95,16 @@ public class UserService {
             Pageable pageable
     ) {
 
-        Specification<UserEntity> spec = UserSpecification.isNotAdmin()
-                .and(UserSpecification.hasName(nameCompleted))
-                .and(UserSpecification.hasEmail(email))
-                .and(UserSpecification.hasCpf(cpf));
+        Specification<UserEntity> spec =
+                UserSpecification.isNotAdmin()
+                        .and(UserSpecification.hasName(nameCompleted))
+                        .and(UserSpecification.hasEmail(email))
+                        .and(UserSpecification.hasCpf(cpf));
 
         Page<UserEntity> users =
                 userRepository.findAll(spec, pageable);
 
-        return users.map(user -> new UserResponseDTO(
-                user.getId(),
-                user.getNameCompleted(),
-                user.getEmail(),
-                user.getPhone(),
-                user.getCpf(),
-                user.getDateBirth(),
-                user.getAddress()
-        ));
+        return users.map(this::toUserResponse);
     }
 
     @Transactional
@@ -93,15 +113,9 @@ public class UserService {
             UpdateRequestDTO request
     ) {
 
-        UserEntity existingUser = userRepository.findById(id)
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "User not found with ID: " + id
-                        )
-                );
+        UserEntity existingUser = findExistingUser(id);
 
-        if (existingUser.getIsAdmin() == true) {
+        if (Boolean.TRUE.equals(existingUser.getIsAdmin())) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Admin user cannot be edited."
@@ -118,20 +132,10 @@ public class UserService {
             );
         }
 
-        if (request.email() != null
-                && !request.email().isBlank()
-                && !existingUser.getEmail().equals(request.email())
-                && userRepository.existsByEmail(request.email())) {
-
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Email already in use by another account"
-            );
-        }
+        validateEmailAvailability(existingUser, request.email());
 
         if (request.nameCompleted() != null
                 && !request.nameCompleted().isBlank()) {
-
             existingUser.setNameCompleted(
                     request.nameCompleted()
             );
@@ -139,7 +143,6 @@ public class UserService {
 
         if (request.email() != null
                 && !request.email().isBlank()) {
-
             existingUser.setEmail(
                     request.email()
             );
@@ -147,7 +150,6 @@ public class UserService {
 
         if (request.address() != null
                 && !request.address().isBlank()) {
-
             existingUser.setAddress(
                     request.address()
             );
@@ -155,7 +157,6 @@ public class UserService {
 
         if (request.phone() != null
                 && !request.phone().isBlank()) {
-
             existingUser.setPhone(
                     request.phone()
             );
@@ -163,11 +164,8 @@ public class UserService {
 
         if (request.password() != null
                 && !request.password().isBlank()) {
-
             existingUser.setPassword(
-                    passwordEncoder.encode(
-                            request.password()
-                    )
+                    passwordEncoder.encode(request.password())
             );
         }
 
@@ -186,31 +184,40 @@ public class UserService {
     @Transactional
     public UserResponseDTO adminUpdateUser(
             Long id,
-            UserRequestDTO request
+            AdminUpdateUserRequestDTO request
     ) {
 
-        UserEntity existingUser = userRepository.findById(id)
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "User not found with ID: " + id
-                        )
-                );
+        UserEntity existingUser = findExistingUser(id);
 
-        if (request.email() != null
-                && !request.email().isBlank()
-                && !existingUser.getEmail().equals(request.email())
-                && userRepository.existsByEmail(request.email())) {
-
+        if (Boolean.TRUE.equals(existingUser.getIsAdmin())) {
             throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Email already in use by another account"
+                    HttpStatus.FORBIDDEN,
+                    "Admin user cannot be edited."
             );
+        }
+
+        validateEmailAvailability(existingUser, request.email());
+
+        if (request.cpf() != null
+                && !request.cpf().isBlank()) {
+
+            String newCpf = normalizeCpf(request.cpf());
+            String currentCpf = normalizeCpf(existingUser.getCpf());
+
+            if (!newCpf.equals(currentCpf)
+                    && userRepository.existsByCpf(newCpf)) {
+
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "CPF already in use by another account"
+                );
+            }
+
+            existingUser.setCpf(newCpf);
         }
 
         if (request.nameCompleted() != null
                 && !request.nameCompleted().isBlank()) {
-
             existingUser.setNameCompleted(
                     request.nameCompleted()
             );
@@ -218,7 +225,6 @@ public class UserService {
 
         if (request.email() != null
                 && !request.email().isBlank()) {
-
             existingUser.setEmail(
                     request.email()
             );
@@ -226,7 +232,6 @@ public class UserService {
 
         if (request.phone() != null
                 && !request.phone().isBlank()) {
-
             existingUser.setPhone(
                     request.phone()
             );
@@ -234,22 +239,12 @@ public class UserService {
 
         if (request.address() != null
                 && !request.address().isBlank()) {
-
             existingUser.setAddress(
                     request.address()
             );
         }
 
-        if (request.cpf() != null
-                && !request.cpf().isBlank()) {
-
-            existingUser.setCpf(
-                    request.cpf()
-            );
-        }
-
         if (request.dateBirth() != null) {
-
             existingUser.setDateBirth(
                     request.dateBirth()
             );
@@ -258,15 +253,7 @@ public class UserService {
         UserEntity savedUser =
                 userRepository.save(existingUser);
 
-        return new UserResponseDTO(
-                savedUser.getId(),
-                savedUser.getNameCompleted(),
-                savedUser.getEmail(),
-                savedUser.getPhone(),
-                savedUser.getCpf(),
-                savedUser.getDateBirth(),
-                savedUser.getAddress()
-        );
+        return toUserResponse(savedUser);
     }
 
     @Transactional
@@ -276,21 +263,23 @@ public class UserService {
 
         UserEntity existingUser = userRepository
                 .findByEmail(request.email())
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.BAD_REQUEST,
-                                "Invalid email or CPF"
-                        )
-                );
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Invalid email or CPF"
+                ));
 
-        if (existingUser.getIsAdmin() == true) {
+        if (Boolean.TRUE.equals(existingUser.getIsAdmin())) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Admin cannot reset password."
             );
         }
 
-        if (!existingUser.getCpf().equals(request.cpf())) {
+        String storedCpf = normalizeCpf(existingUser.getCpf());
+        String informedCpf = normalizeCpf(request.cpf());
+
+        if (storedCpf == null
+                || !storedCpf.equals(informedCpf)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Invalid email or CPF"
@@ -307,9 +296,7 @@ public class UserService {
         }
 
         existingUser.setPassword(
-                passwordEncoder.encode(
-                        request.newPassword()
-                )
+                passwordEncoder.encode(request.newPassword())
         );
 
         userRepository.save(existingUser);
@@ -318,13 +305,15 @@ public class UserService {
     @Transactional
     public void deleteUser(Long id) {
 
-        if (!userRepository.existsById(id)) {
+        UserEntity existingUser = findExistingUser(id);
+
+        if (Boolean.TRUE.equals(existingUser.getIsAdmin())) {
             throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "User not found with ID: " + id
+                    HttpStatus.FORBIDDEN,
+                    "Admin user cannot be deleted."
             );
         }
 
-        userRepository.deleteById(id);
+        userRepository.delete(existingUser);
     }
 }

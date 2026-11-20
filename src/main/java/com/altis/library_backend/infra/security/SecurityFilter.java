@@ -1,15 +1,19 @@
+
 package com.altis.library_backend.infra.security;
 
 import com.altis.library_backend.auth.services.TokenService;
+import com.altis.library_backend.users.models.entities.UserEntity;
 import com.altis.library_backend.users.repositories.UserRepository;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -21,9 +25,17 @@ public class SecurityFilter extends OncePerRequestFilter {
     private final TokenService tokenService;
     private final UserRepository userRepository;
 
-    SecurityFilter(TokenService tokenService, UserRepository userRepository) {
+    public SecurityFilter(
+            TokenService tokenService,
+            UserRepository userRepository
+    ) {
         this.tokenService = tokenService;
         this.userRepository = userRepository;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return HttpMethod.OPTIONS.matches(request.getMethod());
     }
 
     @Override
@@ -33,14 +45,31 @@ public class SecurityFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        var token = this.recoveryToken(request);
+        String token = recoveryToken(request);
 
         if (token != null) {
-            var subject = tokenService.validationToken(token);
 
-            UserDetails user = userRepository
+            String subject = tokenService.validationToken(token);
+
+            if (subject == null || subject.isBlank()) {
+                response.sendError(
+                        HttpServletResponse.SC_UNAUTHORIZED,
+                        "Invalid or expired token"
+                );
+                return;
+            }
+
+            UserEntity user = userRepository
                     .findByEmail(subject)
-                    .orElseThrow();
+                    .orElse(null);
+
+            if (user == null) {
+                response.sendError(
+                        HttpServletResponse.SC_UNAUTHORIZED,
+                        "User not found"
+                );
+                return;
+            }
 
             var authentication =
                     new UsernamePasswordAuthenticationToken(
@@ -58,12 +87,15 @@ public class SecurityFilter extends OncePerRequestFilter {
     }
 
     private String recoveryToken(HttpServletRequest request) {
-        var authHeader = request.getHeader("Authorization");
 
-        if (authHeader == null) {
+        String authHeader = request.getHeader(
+                HttpHeaders.AUTHORIZATION
+        );
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return null;
         }
 
-        return authHeader.replace("Bearer ", "");
+        return authHeader.substring(7);
     }
 }

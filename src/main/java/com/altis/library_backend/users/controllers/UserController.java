@@ -65,7 +65,7 @@ public class UserController {
     @PutMapping("/{id}")
     public ResponseEntity<UserResponseDTO> adminUpdate(
             @PathVariable Long id,
-            @RequestBody @Valid UserRequestDTO request
+            @RequestBody @Valid AdminUpdateUserRequestDTO request
     ) {
         UserResponseDTO response =
                 userService.adminUpdateUser(id, request);

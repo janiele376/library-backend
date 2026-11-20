@@ -1,3 +1,4 @@
+
 package com.altis.library_backend.dashboard.services;
 
 import com.altis.library_backend.books.models.entities.BookEntity;
@@ -5,6 +6,7 @@ import com.altis.library_backend.books.repositories.BookRepository;
 import com.altis.library_backend.dashboard.models.dtos.AdminDashboardResponseDTO;
 import com.altis.library_backend.dashboard.models.dtos.DashboardBookDTO;
 import com.altis.library_backend.dashboard.models.dtos.DashboardRentalDTO;
+import com.altis.library_backend.dashboard.models.dtos.MostRentedBookDTO;
 import com.altis.library_backend.dashboard.models.dtos.UserDashboardResponseDTO;
 import com.altis.library_backend.publishers.repositories.PublisherRepository;
 import com.altis.library_backend.rentals.models.entities.RentalEntity;
@@ -16,8 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class DashboardService {
@@ -37,71 +41,31 @@ public class DashboardService {
     }
 
     @Transactional(readOnly = true)
-    public UserDashboardResponseDTO getUserDashboard(Long userId, Pageable pageable) {
+    public UserDashboardResponseDTO getUserDashboard(
+            Long userId,
+            Pageable pageable
+    ) {
+        List<RentalEntity> userRentals =
+                rentalRepository.findByUsersId_Id(userId);
 
-        List<RentalEntity> userRentals = rentalRepository.findByUsersId_Id(userId);
+        List<RentalEntity> lastRentals =
+                rentalRepository.findTop5ByUsersId_IdOrderByCreatedAtDesc(userId);
 
-        List<RentalEntity> lastRentals = rentalRepository.findTop5ByUsersId_IdOrderByCreatedAtDesc(userId);
+        MostRentedBookDTO mostRentedBookDetails =
+                findMostRentedBook(userRentals);
+
+        String mostRentedBookTitle = mostRentedBookDetails == null
+                ? null
+                : mostRentedBookDetails.title();
 
         return new UserDashboardResponseDTO(
                 toDashboardRentalDTOList(lastRentals),
                 countRentalsByStatus(userRentals, "ON_TIME"),
                 countRentalsByStatus(userRentals, "NEAR_DUE"),
                 countRentalsByStatus(userRentals, "OVERDUE"),
-                findMostRentedBook(userRentals),
+                mostRentedBookTitle,
+                mostRentedBookDetails,
                 getAvailableBooks(pageable)
-        List<RentalEntity> lastRentals =
-                rentalRepository.findTop5ByUsersId_IdOrderByCreatedAtDesc(userId);
-
-        long onTimeRentals = 0;
-        long nearDueRentals = 0;
-        long overdueRentals = 0;
-
-        for (RentalEntity rental : userRentals) {
-
-            if (Boolean.TRUE.equals(rental.getWasReturned())) {
-                continue;
-            }
-
-            String status = calculateStatus(rental);
-
-            if (status.equals("ON_TIME")) {
-                onTimeRentals++;
-            }
-
-            if (status.equals("NEAR_DUE")) {
-                nearDueRentals++;
-            }
-
-            if (status.equals("OVERDUE")) {
-                overdueRentals++;
-            }
-        }
-
-        List<DashboardRentalDTO> lastRentalsDTO =
-                lastRentals.stream()
-                        .map(this::toDashboardRentalDTO)
-                        .toList();
-
-        List<DashboardBookDTO> availableBooks =
-                bookRepository.findAll()
-                        .stream()
-                        .map(book -> new DashboardBookDTO(
-                                book.getTitle(),
-                                book.getQuantity()
-                        ))
-                        .toList();
-
-        String mostRentedBook =
-                findMostRentedBook(userRentals);
-
-        return new UserDashboardResponseDTO(
-                lastRentalsDTO,
-                onTimeRentals,
-                nearDueRentals,
-                overdueRentals,
-                mostRentedBook,
-                availableBooks
         );
     }
 
@@ -110,7 +74,8 @@ public class DashboardService {
 
         List<RentalEntity> rentals = rentalRepository.findAll();
 
-        List<RentalEntity> lastRentals = rentalRepository.findTop5ByOrderByCreatedAtDesc();
+        List<RentalEntity> lastRentals =
+                rentalRepository.findTop5ByOrderByCreatedAtDesc();
 
         return new AdminDashboardResponseDTO(
                 countRentalsByStatus(rentals, "ON_TIME"),
@@ -121,11 +86,15 @@ public class DashboardService {
                 bookRepository.count(),
                 publisherRepository.count(),
                 findMostRentedBook(rentals),
-                getAvailableBooks(pageable)
+                getAvailableBooks(pageable),
+                countActiveRentalsByBook(rentals)
         );
     }
 
-    private long countRentalsByStatus(List<RentalEntity> rentals, String expectedStatus) {
+    private long countRentalsByStatus(
+            List<RentalEntity> rentals,
+            String expectedStatus
+    ) {
         return rentals.stream()
                 .filter(rental ->
                         calculateStatus(rental).equals(expectedStatus)
@@ -133,14 +102,15 @@ public class DashboardService {
                 .count();
     }
 
-    private List<DashboardRentalDTO> toDashboardRentalDTOList(List<RentalEntity> rentals) {
+    private List<DashboardRentalDTO> toDashboardRentalDTOList(
+            List<RentalEntity> rentals
+    ) {
         return rentals.stream()
                 .map(this::toDashboardRentalDTO)
                 .toList();
     }
 
     private Page<DashboardBookDTO> getAvailableBooks(Pageable pageable) {
-
         return bookRepository.findByQuantityGreaterThan(0, pageable)
                 .map(this::toDashboardBookDTO);
     }
@@ -166,7 +136,7 @@ public class DashboardService {
 
     private String calculateStatus(RentalEntity rental) {
 
-        if (Boolean.TRUE.equals(rental.getWasReturned())) {
+        if (isReturned(rental)) {
             return "RETURNED";
         }
 
@@ -184,39 +154,88 @@ public class DashboardService {
         return "ON_TIME";
     }
 
-    private String findMostRentedBook(List<RentalEntity> rentals) {
+    private boolean isReturned(RentalEntity rental) {
+        return Boolean.TRUE.equals(rental.getWasReturned())
+                || "RETURNED".equalsIgnoreCase(rental.getStatus());
+    }
 
+    private Map<Long, Long> countActiveRentalsByBook(
+            List<RentalEntity> rentals
+    ) {
+        Map<Long, Long> bookCounts = new HashMap<>();
+
+        for (RentalEntity rental : rentals) {
+
+            if (isReturned(rental)) {
+                continue;
+            }
+
+            Long bookId = rental.getBooksId().getId();
+
+            bookCounts.merge(bookId, 1L, Long::sum);
+        }
+
+        return bookCounts.entrySet()
+                .stream()
+                .sorted(
+                        Map.Entry.<Long, Long>comparingByValue()
+                                .reversed()
+                                .thenComparing(Map.Entry.comparingByKey())
+                )
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (first, second) -> first,
+                        LinkedHashMap::new
+                ));
+    }
+
+    private MostRentedBookDTO findMostRentedBook(
+            List<RentalEntity> rentals
+    ) {
         if (rentals.isEmpty()) {
             return null;
         }
 
-        Map<BookEntity, Long> bookCount = new HashMap<>();
+        Map<Long, Long> bookCounts = new HashMap<>();
+        Map<Long, BookEntity> books = new HashMap<>();
 
         for (RentalEntity rental : rentals) {
 
             BookEntity book = rental.getBooksId();
+            Long bookId = book.getId();
 
-            bookCount.put(
-                    book,
-                    bookCount.getOrDefault(book, 0L) + 1
-            );
+            bookCounts.merge(bookId, 1L, Long::sum);
+            books.put(bookId, book);
         }
 
-        BookEntity mostRentedBook = null;
-        long highestCount = 0;
+        Long mostRentedId = bookCounts.entrySet()
+                .stream()
+                .sorted(
+                        Map.Entry.<Long, Long>comparingByValue()
+                                .reversed()
+                                .thenComparing(Map.Entry.comparingByKey())
+                )
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElse(null);
 
-        for (Map.Entry<BookEntity, Long> entry : bookCount.entrySet()) {
-
-            if (entry.getValue() > highestCount) {
-                highestCount = entry.getValue();
-                mostRentedBook = entry.getKey();
-            }
-        }
-
-        if (mostRentedBook == null) {
+        if (mostRentedId == null) {
             return null;
         }
 
-        return mostRentedBook.getTitle();
+        BookEntity book = books.get(mostRentedId);
+
+        String publisher = book.getPublisherId() == null
+                ? null
+                : book.getPublisherId().getName();
+
+        return new MostRentedBookDTO(
+                book.getId(),
+                book.getTitle(),
+                publisher,
+                book.getReleaseDate(),
+                bookCounts.get(mostRentedId)
+        );
     }
 }

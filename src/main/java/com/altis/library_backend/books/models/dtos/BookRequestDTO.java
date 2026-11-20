@@ -1,10 +1,10 @@
+
 package com.altis.library_backend.books.models.dtos;
 
-import com.altis.library_backend.publishers.models.entities.PublisherEntity;
-import jakarta.validation.constraints.*;
-import org.springframework.data.annotation.CreatedDate;
-
-import java.time.LocalDateTime;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public record BookRequestDTO(
 
@@ -23,6 +23,10 @@ public record BookRequestDTO(
 
         Long publisherId,
 
-        String publisherName
+        String publisherName,
+
+        @NotNull(message = "A quantidade é obrigatória.")
+        @Min(value = 0, message = "A quantidade não pode ser negativa.")
+        Integer quantity
 
 ) {}

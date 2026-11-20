@@ -1,6 +1,5 @@
-package com.altis.library_backend.books.models.dtos;
 
-import com.altis.library_backend.publishers.models.entities.PublisherEntity;
+package com.altis.library_backend.books.models.dtos;
 
 public record UpdateResponseDTO(
         Long id,
@@ -8,5 +7,6 @@ public record UpdateResponseDTO(
         String genre,
         String releaseDate,
         Long publisherId,
-        String publisherName
+        String publisherName,
+        Integer quantity
 ) {}
