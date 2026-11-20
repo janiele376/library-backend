@@ -4,11 +4,14 @@ package com.altis.library_backend.infra.security;
 import com.altis.library_backend.auth.services.TokenService;
 import com.altis.library_backend.users.models.entities.UserEntity;
 import com.altis.library_backend.users.repositories.UserRepository;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -31,6 +34,11 @@ public class SecurityFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return HttpMethod.OPTIONS.matches(request.getMethod());
+    }
+
+    @Override
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
@@ -40,6 +48,7 @@ public class SecurityFilter extends OncePerRequestFilter {
         String token = recoveryToken(request);
 
         if (token != null) {
+
             String subject = tokenService.validationToken(token);
 
             if (subject == null || subject.isBlank()) {
@@ -78,15 +87,12 @@ public class SecurityFilter extends OncePerRequestFilter {
     }
 
     private String recoveryToken(HttpServletRequest request) {
+
         String authHeader = request.getHeader(
                 HttpHeaders.AUTHORIZATION
         );
 
-        if (authHeader == null) {
-            return null;
-        }
-
-        if (!authHeader.startsWith("Bearer ")) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return null;
         }
 
