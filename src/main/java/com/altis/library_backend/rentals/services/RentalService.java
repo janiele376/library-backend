@@ -13,7 +13,9 @@ import com.altis.library_backend.users.models.entities.UserEntity;
 import com.altis.library_backend.users.repositories.UserRepository;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -58,8 +60,17 @@ public class RentalService {
                 RentalSpecification.hasUserName(userName)
                         .and(RentalSpecification.hasBookTitle(bookTitle));
 
+        Pageable sortedPageable = PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                Sort.by(
+                        Sort.Order.asc("status"),
+                        Sort.Order.desc("createdAt")
+                )
+        );
+
         Page<RentalEntity> rentals =
-                rentalRepository.findAll(specification, pageable);
+                rentalRepository.findAll(specification, sortedPageable);
 
         return rentals.map(this::toResponseDTO);
     }
